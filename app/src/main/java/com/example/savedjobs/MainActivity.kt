@@ -5,7 +5,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.ColorRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.layout.Arrangement
@@ -26,14 +25,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,30 +38,25 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.res.vectorResource
-
+import com.example.savedjobs.data.JobEntity
+import com.example.savedjobs.viewmodel.JobViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 
 class MainActivity : ComponentActivity() {
@@ -76,32 +64,31 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            SavedJobsScreen()
+            val viewModel: JobViewModel = viewModel()
+
+            LaunchedEffect(Unit) {
+                viewModel.saveJob(
+                    JobEntity(
+                        id = 1,
+                        title = "Android Developer",
+                        company = "Tech Corp",
+                        location = "Remote",
+                        salary = "$3000",
+                        description = "hfhaisk;"
+                    )
+                )
+            }
+            SavedJobsScreen(viewModel = viewModel)
         }
     }
 }
 
-data class Job(
-    val title: String,
-    val Company: String,
-    val Location: String,
-    val Salary: String,
-    var isSaved: Boolean = true
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Preview(showBackground = true)
+
 @Composable
-fun SavedJobsScreen() {
-    val jobList = remember {
-        mutableStateListOf(
-            Job("Software Engineer", "Google", "Mountain View, CA", "$120K"),
-            Job("Product Manager", "Facebook", "Menlo Park, CA", "$140K"),
-            Job("UX Designer", "Creative Studio", "San Francisco, CA", "$130K"),
-            Job("UX Designer", "Creative Studio", "San Francisco, CA", "$130K"),
-            Job("UX Designer", "Creative Studio", "San Francisco, CA", "$130K"),
-        )
-    }
+fun SavedJobsScreen(viewModel: JobViewModel) {
+    val jobList by viewModel.jobs.collectAsState()
 
     Scaffold(
         topBar = {
@@ -140,8 +127,7 @@ fun SavedJobsScreen() {
                         ) {
                             DropdownMenuItem(
                                 onClick = {
-                                    expanded = false
-                                    jobList.clear()
+                                    viewModel.clearAll()
                                 },
                                 text = { Text("Clear All") }
                             )
@@ -158,14 +144,14 @@ fun SavedJobsScreen() {
         },
         content = { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
-                SavedJobsContent(jobList = jobList)
+                SavedJobsContent(jobList = jobList, viewModel = viewModel)
             }
         },
     )
 }
 
 @Composable
-fun SavedJobsContent(jobList: SnapshotStateList<Job>) {
+fun SavedJobsContent(jobList: List<JobEntity>, viewModel: JobViewModel) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -185,14 +171,14 @@ fun SavedJobsContent(jobList: SnapshotStateList<Job>) {
                     )
             ) {
                 Spacer(modifier = Modifier.height(8.dp))
-
-                jobList.forEachIndexed { index, job ->
-                    InfoCard(
-                        job = job,
-                        onRemoveJob = {
-                            jobList.removeAt(index)
+                jobList.forEach { job ->
+                    InfoCard(job, onToggleSave = {
+                        if (jobList.contains(job)) {
+                            viewModel.removeJob(job)
+                        } else {
+                            viewModel.saveJob(job)
                         }
-                    )
+                    })
                     Spacer(modifier = Modifier.height(8.dp))
                 }
             }
@@ -201,9 +187,7 @@ fun SavedJobsContent(jobList: SnapshotStateList<Job>) {
 }
 
 @Composable
-fun InfoCard(job: Job, onRemoveJob: (Job) -> Unit) {
-    val isSaved = remember { mutableStateOf(job.isSaved) }
-
+fun InfoCard(job: JobEntity, onToggleSave: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -236,22 +220,16 @@ fun InfoCard(job: Job, onRemoveJob: (Job) -> Unit) {
                     )
                 }
 
-                IconButton(
-                    onClick = {
-                    job.isSaved = !job.isSaved
-                    if (!job.isSaved) onRemoveJob(job)
-                }
-                ) {
+                IconButton(onClick = { onToggleSave() }) {
                     Icon(
-                        imageVector = if (job.isSaved) Icons.Filled.Bookmark else Icons.Outlined.BookmarkBorder,
-                        contentDescription = "Save Job",
-                        tint = if (isSaved.value) Color.White else Color.Gray
+                        imageVector = Icons.Filled.Bookmark,
+                        contentDescription = "Unsave",
+                        tint = Color.White
                     )
                 }
             }
-
             Text(
-                text = job.Company,
+                text = job.company,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -267,7 +245,7 @@ fun InfoCard(job: Job, onRemoveJob: (Job) -> Unit) {
                 )
                 Spacer(modifier = Modifier.width(7.dp))
                 Text(
-                    text = job.Location,
+                    text = job.location,
                     fontSize = 18.sp,
                     color = Color.White
                 )
@@ -283,7 +261,7 @@ fun InfoCard(job: Job, onRemoveJob: (Job) -> Unit) {
                 )
                 Spacer(modifier = Modifier.width(5.dp))
                 Text(
-                    text = "Salary: ${job.Salary}",
+                    text = "Salary: ${job.salary}",
                     fontSize = 18.sp,
                     color = Color.White
                 )
@@ -310,3 +288,6 @@ fun InfoCard(job: Job, onRemoveJob: (Job) -> Unit) {
         }
     }
 }
+
+
+
